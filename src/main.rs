@@ -1,6 +1,5 @@
 use bevy::input::common_conditions::{input_just_pressed, input_just_released, input_pressed};
 use bevy::input::mouse::AccumulatedMouseScroll;
-use bevy::log::{Level, LogPlugin};
 use bevy::window::PrimaryWindow;
 use bevy::{
     prelude::*,
@@ -21,7 +20,7 @@ fn main() {
             ..default()
         }))
         .add_systems(Startup, setup_system)
-        .add_systems(Update, zoom)
+        .add_systems(Update, (zoom, arrow_key_pan))
         .add_systems(
             Update,
             (
@@ -52,6 +51,21 @@ fn setup_system(
     commands.spawn((Mesh2d(shape), MeshMaterial2d(materials.add(color))));
 }
 
+fn arrow_key_pan(
+    mut cam_t: Single<&mut Transform, With<Camera>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    for key in keyboard.get_pressed() {
+        match key {
+            KeyCode::ArrowLeft => cam_t.translation.x -= 20.0,
+            KeyCode::ArrowRight => cam_t.translation.x += 20.0,
+            KeyCode::ArrowUp => cam_t.translation.y += 20.0,
+            KeyCode::ArrowDown => cam_t.translation.y -= 20.0,
+            _ => return,
+        }
+    }
+}
+
 fn zoom(
     camera: Single<&mut OrthographicProjection, With<Camera>>,
     mouse_wheel_input: Res<AccumulatedMouseScroll>,
@@ -64,7 +78,11 @@ fn zoom(
     // and negative values result in multiplicative decreases.
     let multiplicative_zoom = 1. + delta_zoom;
 
-    camera.into_inner().scale = camera.scale * multiplicative_zoom;
+    let mut camera = camera.into_inner();
+
+    camera.scale = camera.scale * multiplicative_zoom;
+
+    println!("scale: {}", camera.scale);
 }
 
 fn start_drag(mut commands: Commands, primary_window: Single<&Window, With<PrimaryWindow>>) {
@@ -85,27 +103,25 @@ fn end_drag(mut commands: Commands) {
 fn drag(
     mut last_pos: ResMut<LastPos>,
     primary_window: Single<&Window, With<PrimaryWindow>>,
-    cam_q: Single<(&Camera, &GlobalTransform, &mut Transform)>,
+    cam_q: Single<(&mut Transform, &OrthographicProjection)>,
 ) {
     // If the cursor is not within the primary window skip this system
     let Some(cursor_pos) = primary_window.cursor_position() else {
         return;
     };
 
-    let (cam, cam_global_t, mut cam_t) = cam_q.into_inner();
+    let (mut cam_t, proj) = cam_q.into_inner();
 
     let delta = cursor_pos - last_pos.0;
 
     // Get the cursor position in the world
-    let world_space_delta = cam
-        .viewport_to_world_2d(cam_global_t, delta)
-        .unwrap()
-        .extend(cam_t.translation.z);
+    let world_space_delta = (delta * proj.scale).extend(cam_t.translation.z);
 
     let old_translation = cam_t.translation.truncate();
 
     // Update the translation of Bevy logo transform to new translation
-    cam_t.translation -= world_space_delta;
+    cam_t.translation.x -= world_space_delta.x;
+    cam_t.translation.y += world_space_delta.y;
 
     let new_translation = cam_t.translation.truncate();
 
