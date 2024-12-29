@@ -10,9 +10,12 @@ version = "0.15.0"
 default-features = false
 features = [
     "async-io",
+    "bevy_asset",
+    "bevy_core_pipeline",
     "bevy_mesh_picking_backend",
     "bevy_picking",
     "bevy_render",
+    "bevy_sprite",
     "bevy_state",
     "bevy_winit",
     "bevy_window",
