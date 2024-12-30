@@ -1,5 +1,7 @@
 use bevy::input::common_conditions::{input_just_pressed, input_just_released, input_pressed};
 use bevy::input::mouse::AccumulatedMouseScroll;
+use bevy::render::primitives::Frustum;
+use bevy::render::view::{NoFrustumCulling, VisibleEntities};
 use bevy::window::PrimaryWindow;
 use bevy::{
     prelude::*,
@@ -45,6 +47,7 @@ fn setup_system(
     commands.spawn((
         Camera2d::default(),
         Projection::from(OrthographicProjection::default_2d()),
+        NoFrustumCulling,
     ));
     let shape = meshes.add(Rectangle::new(300.0, 300.0));
     let color = Color::Srgba(Srgba::BLUE);
@@ -52,15 +55,17 @@ fn setup_system(
 }
 
 fn arrow_key_pan(
-    mut cam_t: Single<&mut Transform, With<Camera>>,
+    cam_q: Single<(&mut Transform, &OrthographicProjection), With<Camera>>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
+    let (mut cam_t, proj) = cam_q.into_inner();
+    let delta = 20.0 * proj.scale;
     for key in keyboard.get_pressed() {
         match key {
-            KeyCode::ArrowLeft => cam_t.translation.x -= 20.0,
-            KeyCode::ArrowRight => cam_t.translation.x += 20.0,
-            KeyCode::ArrowUp => cam_t.translation.y += 20.0,
-            KeyCode::ArrowDown => cam_t.translation.y -= 20.0,
+            KeyCode::ArrowLeft => cam_t.translation.x -= delta,
+            KeyCode::ArrowRight => cam_t.translation.x += delta,
+            KeyCode::ArrowUp => cam_t.translation.y += delta,
+            KeyCode::ArrowDown => cam_t.translation.y -= delta,
             _ => return,
         }
     }
@@ -82,7 +87,7 @@ fn zoom(
 
     camera.scale = camera.scale * multiplicative_zoom;
 
-    println!("scale: {}", camera.scale);
+    // println!("scale: {}", camera.scale);
 }
 
 fn start_drag(mut commands: Commands, primary_window: Single<&Window, With<PrimaryWindow>>) {
@@ -103,14 +108,25 @@ fn end_drag(mut commands: Commands) {
 fn drag(
     mut last_pos: ResMut<LastPos>,
     primary_window: Single<&Window, With<PrimaryWindow>>,
-    cam_q: Single<(&mut Transform, &OrthographicProjection)>,
+    cam_q: Single<(
+        &mut Transform,
+        &OrthographicProjection,
+        &Frustum,
+        &VisibleEntities,
+    )>,
 ) {
     // If the cursor is not within the primary window skip this system
     let Some(cursor_pos) = primary_window.cursor_position() else {
         return;
     };
 
-    let (mut cam_t, proj) = cam_q.into_inner();
+    let (mut cam_t, proj, frustum, visible_entities) = cam_q.into_inner();
+
+    let visible_entities = visible_entities
+        .entities
+        .values()
+        .flatten()
+        .collect::<Vec<_>>();
 
     let delta = cursor_pos - last_pos.0;
 
@@ -125,7 +141,7 @@ fn drag(
 
     let new_translation = cam_t.translation.truncate();
 
-    println!("world_space_delta {world_space_delta} delta {delta} old_translation {old_translation} new_translation {new_translation} last_pos {} cursor_pos {cursor_pos}", last_pos.0);
+    println!("world_space_delta {world_space_delta} delta {delta} old_translation {old_translation} new_translation {new_translation} last_pos {} cursor_pos {cursor_pos} frustum {frustum:?} visible_entities {visible_entities:?}", last_pos.0);
 
     last_pos.0 = cursor_pos;
 }
